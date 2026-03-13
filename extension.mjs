@@ -31,7 +31,7 @@ When cherry-pick produces conflicts:
 2. For each conflicted file, open it and look for conflict markers (\`<<<<<<<\`, \`=======\`, \`>>>>>>>\`).
 3. Use the PR diff (from Step 1) to understand the author's **intent**, i.e. what they were trying to change.
 4. Compare the author's intended changes against the current state of the file on main.
-5. Resolve each conflict by applying the author's intended changes to the current main content. Prefer the author's new content, but keep any unrelated upstream changes that happened since the PR was opened.
+5. Resolve each conflict using this principle: **favor main by default.** Changes that landed on main after the PR was opened should be preserved. Only override main's content when the original PR commits explicitly changed that specific text. In other words, only apply the author's changes to lines they actually modified; keep everything else as main has it. Do NOT revert upstream changes that the author never touched.
 6. After resolving, run \`git add <file>\` for each resolved file.
 7. Verify no conflict markers remain: \`git grep -rn "<<<<<<< " -- "*.md"\` (should return nothing).
 
@@ -62,7 +62,8 @@ If there were no build issues, skip this step.
 ## Step 7: Close original PR and finalize
 - Close the original PR with a comment explaining it was superseded by the new PR.
 - Remove the "do-not-merge" label from the new PR if present.
-- **Only if the user passed #sign-off**: Add a "#sign-off" comment on the new PR to merge it.
+- **If merge conflicts were resolved**: Do NOT auto-sign-off regardless of the #sign-off flag. Conflict resolutions always require human review. Let the user know they can sign off manually after reviewing.
+- **Only if the user passed #sign-off AND no merge conflicts were resolved**: Add a "#sign-off" comment on the new PR to merge it.
 - **If #sign-off was NOT passed**: Do NOT add a sign-off comment. Just share the new PR link and let the user know they can sign off manually when ready.
 - Share the new PR link with the user.
 
