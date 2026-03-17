@@ -84,8 +84,22 @@ const session = await joinSession({
 
             if (!prUrl) {
                 return {
-                    modifiedPrompt: "The user invoked the lazypm command but did not provide a PR URL. Ask them for the GitHub PR URL they want you to process.",
-                    additionalContext: "The lazypm command format: lazypm <PR URL> [#sign-off]. The #sign-off flag is optional and controls whether to auto-merge.",
+                    modifiedPrompt: "Display the usage for the lazypm extension to the user.",
+                    additionalContext: [
+                        "lazypm: Lazy PR manager - pulls a PR, fixes build warnings/errors/suggestions",
+                        "and/or merge conflicts, creates a new clean PR, closes the original, and signs off.",
+                        "",
+                        "Usage: lazypm <PR URL> [#sign-off]",
+                        "",
+                        "Arguments:",
+                        "  <PR URL>       GitHub pull request URL (e.g. https://github.com/owner/repo/pull/123)",
+                        "  [#sign-off]    Optional flag to auto-merge the new PR after build passes",
+                        "                 (skipped if merge conflicts were resolved)",
+                        "",
+                        "Examples:",
+                        "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456",
+                        "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 #sign-off",
+                    ].join("\n"),
                 };
             }
 
