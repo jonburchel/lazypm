@@ -1,12 +1,12 @@
 ---
 name: lazypm
-description: "lazypm <PR URL> [#sign-off]"
+description: "lazypm <PR URL> [yolo] [#sign-off]"
 ---
 
 # LazyPM Skill
 
-Lazy PR manager: pulls a PR, fixes build warnings/errors/suggestions
-and/or merge conflicts, creates a new clean PR, closes the original, and signs off.
+Lazy PR manager: fixes build issues on a PR, creates a clean new PR, and closes the original.
+In yolo mode, also resolves merge conflicts and addresses PR review/reviewer feedback.
 
 ## Usage
 
@@ -16,12 +16,14 @@ The agent does not need to do anything special; just pass through the user's mes
 | User says | What happens |
 |---|---|
 | `lazypm` | Shows usage and examples |
-| `lazypm <PR URL>` | Processes the PR: fixes build issues and conflicts, creates new PR |
-| `lazypm <PR URL> #sign-off` | Same as above, but auto-merges if no conflicts were resolved |
+| `lazypm <PR URL>` | Basic: fixes build issues, creates new PR |
+| `lazypm <PR URL> #sign-off` | Basic + auto-merge after clean build |
+| `lazypm <PR URL> yolo #sign-off` | Yolo: fixes build + conflicts + review feedback (never auto-merges) |
 
 ## Examples
 
 ```
 lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456
 lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 #sign-off
+lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 yolo #sign-off
 ```
