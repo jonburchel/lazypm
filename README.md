@@ -9,7 +9,7 @@ lazypm <PR URL>              # Fix build, create new PR, close original (no merg
 lazypm <PR URL> #sign-off    # Same as above, plus auto-merge via #sign-off comment
 ```
 
-If you omit the PR URL, it will ask you for one.
+If you omit the PR URL, it shows usage and examples.
 
 ## What it does
 
@@ -24,14 +24,16 @@ If you omit the PR URL, it will ask you for one.
 
 ## Installation
 
-Copy the `lazypm/` folder to one of these locations:
+Copy the extension and skill files to these locations:
 
-| Scope | Path |
-|-------|------|
-| **Per-user** (all repos) | `~/.copilot/extensions/lazypm/` |
-| **Per-project** (one repo) | `.github/extensions/lazypm/` |
+```
+~/.copilot/extensions/lazypm/extension.mjs   # Extension (required)
+~/.copilot/skills/lazypm/SKILL.md            # Skill definition (for /lazypm slash command)
+```
 
-Only `extension.mjs` is required. The CLI auto-discovers it on startup.
+Or for a single project, put the extension in `.github/extensions/lazypm/`.
+
+The CLI auto-discovers extensions on startup. Run `/clear` to reload after installing.
 
 ## Examples
 
