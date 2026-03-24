@@ -18,12 +18,12 @@ The agent does not need to do anything special; just pass through the user's mes
 | `lazypm` | Shows usage and examples |
 | `lazypm <PR URL>` | Basic: fixes build issues, creates new PR |
 | `lazypm <PR URL> #sign-off` | Basic + auto-merge after clean build |
-| `lazypm <PR URL> yolo #sign-off` | Yolo: fixes build + conflicts + review feedback (never auto-merges) |
+| `lazypm <PR URL> yolo` | Yolo: fixes build + conflicts + review feedback (never auto-merges) |
 
 ## Examples
 
 ```
 lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456
 lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 #sign-off
-lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 yolo #sign-off
+lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 yolo
 ```

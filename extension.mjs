@@ -18,7 +18,7 @@ You are executing the **lazypm** workflow in **basic mode**. Follow these steps 
 - Check the PR's \`mergeable_state\` to determine if there are merge conflicts.
 - Identify the build report comment from "learn-build-service-prod[bot]" that contains warnings, errors, or suggestions (if any).
 - Parse ALL issues from the build report (file-not-found, docs-link-absolute, etc.).
-- **If there are merge conflicts**, stop and tell the user: "This PR has merge conflicts. Use \`lazypm <URL> yolo #sign-off\` to resolve conflicts, address review comments, and fix build issues."
+- **If there are merge conflicts**, stop and tell the user: "This PR has merge conflicts. Use \`lazypm <URL> yolo\` to resolve conflicts, address review comments, and fix build issues."
 
 ## Step 2: Create a new branch and apply changes
 - Check F:\\git and F:\\home for an existing clone of the target repo. Use an existing clone if found; only clone fresh if neither location has one.
@@ -159,26 +159,14 @@ const session = await joinSession({
                         "Modes:",
                         "  lazypm <URL>                  Basic: fix build issues only",
                         "  lazypm <URL> #sign-off        Basic + auto-merge after clean build",
-                        "  lazypm <URL> yolo #sign-off   Yolo: fix build + conflicts + review feedback",
+                        "  lazypm <URL> yolo             Yolo: fix build + conflicts + review feedback",
                         "                                (never auto-merges; human review required)",
-                        "",
-                        "The yolo keyword requires #sign-off as an acknowledgment of risk,",
-                        "but yolo mode never actually auto-merges.",
                         "",
                         "Examples:",
                         "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456",
                         "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 #sign-off",
-                        "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 yolo #sign-off",
+                        "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 yolo",
                     ].join("\n"),
-                };
-            }
-
-            if (yolo && !signOff) {
-                return {
-                    modifiedPrompt: "Tell the user that yolo mode requires #sign-off as an acknowledgment.",
-                    additionalContext: "The user used `lazypm <URL> yolo` but forgot `#sign-off`. "
-                        + "Yolo mode requires `#sign-off` at the end as an acknowledgment of risk "
-                        + "(it won't actually auto-merge). Correct syntax: `lazypm <URL> yolo #sign-off`",
                 };
             }
 

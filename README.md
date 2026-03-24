@@ -7,7 +7,7 @@ A Copilot CLI extension that automates the "fix a PR's build issues and/or merge
 ```
 lazypm <PR URL>                  # Fix build issues, create new PR, close original
 lazypm <PR URL> #sign-off        # Same + auto-merge after clean build
-lazypm <PR URL> yolo #sign-off   # Fix build + resolve conflicts + address review feedback
+lazypm <PR URL> yolo             # Fix build + resolve conflicts + address review feedback
 ```
 
 If you omit the PR URL, it shows usage and examples.
@@ -21,7 +21,7 @@ Fixes build warnings, errors, and suggestions. If the PR has merge conflicts, it
 Does everything basic mode does, plus:
 - **Resolves merge conflicts** by cherry-picking the author's changes onto current main
 - **Addresses PR review comments** (inline suggestions, requested changes, reviewer feedback)
-- **Never auto-merges**, even though `#sign-off` is required in the command. The `#sign-off` keyword serves as an acknowledgment that you understand yolo mode makes judgment calls on conflicts and review feedback. You must review and sign off manually.
+- **Never auto-merges.** You must review and sign off manually after inspecting the changes.
 
 ## What it does
 
@@ -58,5 +58,5 @@ lazypm https://github.com/yourorg/your-repo/pull/123
 lazypm https://github.com/yourorg/your-repo/pull/123 #sign-off
 
 # Fix everything: build, conflicts, review comments (requires manual review)
-lazypm https://github.com/yourorg/your-repo/pull/123 yolo #sign-off
+lazypm https://github.com/yourorg/your-repo/pull/123 yolo
 ```
