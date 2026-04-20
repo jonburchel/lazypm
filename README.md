@@ -89,5 +89,5 @@ lazypm https://github.com/yourorg/your-repo/pull/123 #sign-off
 lazypm https://github.com/yourorg/your-repo/pull/123 yolo
 
 # Find and implement a PM's recent content change requests
-lazypm Amir Jafari
+lazypm <your lazy PM's name here!>
 ```
