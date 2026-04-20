@@ -9,6 +9,7 @@ lazypm <PR URL>                  # Fix build issues, create new PR, close origin
 lazypm <PR URL> #sign-off        # Same + auto-merge after clean build
 lazypm <PR URL> yolo             # Fix build + resolve conflicts + address review feedback
 lazypm <Name>                    # PM mode: find and implement their requests
+lazypm update                    # Self-update to the latest version
 ```
 
 If you omit arguments, it shows usage and examples.
@@ -34,6 +35,10 @@ Given a person's name, uses WorkIQ (Microsoft 365 Copilot) to find their recent 
 - Reports the PR URL so you can send it to the PM
 
 PM mode does not support `yolo` or `#sign-off` flags. Changes always require manual review.
+
+## Auto-update
+
+On startup, lazypm checks GitHub for a newer version by comparing the installed commit SHA against the latest on `main`. If an update is available, it logs a notification with the commit info and message. Run `lazypm update` to pull the latest code, copy it to the installed locations, and reload.
 
 ## What it does
 

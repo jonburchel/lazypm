@@ -1,6 +1,6 @@
 ---
 name: lazypm
-description: "lazypm <PR URL> [yolo] [#sign-off] | lazypm <Name>"
+description: "lazypm <PR URL> [yolo] [#sign-off] | lazypm <Name> | lazypm update"
 ---
 
 # LazyPM Skill
@@ -21,6 +21,11 @@ The agent does not need to do anything special; just pass through the user's mes
 | `lazypm <PR URL> #sign-off` | PR mode (basic) + auto-merge after clean build |
 | `lazypm <PR URL> yolo` | PR mode (yolo): fixes build + conflicts + review feedback (never auto-merges) |
 | `lazypm <Name>` | PM mode: finds PM's requests via WorkIQ, implements as a new PR |
+| `lazypm update` | Self-update: pulls the latest version from GitHub |
+
+## Auto-update
+
+On startup, lazypm checks GitHub for a newer version. If one is found, it logs a notification with the commit info. Run `lazypm update` to install it.
 
 ## Examples
 

@@ -8,9 +8,53 @@
 
 import { approveAll } from "@github/copilot-sdk";
 import { joinSession } from "@github/copilot-sdk/extension";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
 
 const PR_URL_PATTERN = /https:\/\/github\.com\/[^\s]+\/pull\/\d+/i;
 const FLAGS = /\b(yolo|#sign-off)\b/gi;
+
+// Auto-update paths (derived from this file's location)
+const __filename = fileURLToPath(import.meta.url);
+const EXTENSION_DIR = dirname(__filename);
+const COPILOT_DIR = join(EXTENSION_DIR, "..", "..");
+const SKILL_DIR = join(COPILOT_DIR, "skills", "lazypm");
+const VERSION_FILE = join(EXTENSION_DIR, ".version");
+const REPO_OWNER = "jonburchel";
+const REPO_NAME = "lazypm";
+const REPO_API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/commits/main`;
+const REPO_DIR = "F:\\home\\lazypm";
+
+/**
+ * Check for a newer version on GitHub. Notifies the user if one is found.
+ * Runs fire-and-forget at startup; never blocks or throws.
+ */
+async function checkForUpdates(session) {
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    const headers = { "Accept": "application/vnd.github.v3+json", "User-Agent": "lazypm-extension" };
+    if (token) headers["Authorization"] = `token ${token}`;
+
+    const res = await fetch(REPO_API_URL, { headers });
+    if (!res.ok) return;
+    const data = await res.json();
+    const remoteSha = data.sha;
+
+    let localSha = "";
+    try {
+        localSha = (await readFile(VERSION_FILE, "utf-8")).trim();
+    } catch {
+        // No version file yet (first load). Seed it with the current remote SHA.
+        await writeFile(VERSION_FILE, remoteSha, "utf-8");
+        return;
+    }
+
+    if (remoteSha !== localSha) {
+        const shortSha = remoteSha.slice(0, 7);
+        const commitMsg = (data.commit?.message || "").split("\n")[0];
+        await session.log(`⚡ lazypm update available (${shortSha}: ${commitMsg}). Run "lazypm update" to install.`);
+    }
+}
 
 const BASIC_WORKFLOW = `
 You are executing the **lazypm** workflow in **basic mode**. Follow these steps precisely:
@@ -219,6 +263,28 @@ Ask the user to confirm:
 - Switch back to the default branch locally.
 `;
 
+const UPDATE_WORKFLOW = `
+You are executing the **lazypm update** workflow. Pull the latest version from GitHub and update the installed extension files.
+
+## Steps
+
+1. Navigate to the lazypm repo at ${REPO_DIR.replace(/\\/g, "\\\\")}.
+   - If the directory does not exist, clone the repo first:
+     \`git clone https://github.com/${REPO_OWNER}/${REPO_NAME}.git "${REPO_DIR.replace(/\\/g, "\\\\")}"\`
+   - If it exists, run \`git pull origin main\` to get the latest.
+
+2. Copy the updated files to the installed locations:
+   - \`extension.mjs\` and \`README.md\` to: \`${EXTENSION_DIR.replace(/\\/g, "\\\\")}\`
+   - \`SKILL.md\` to: \`${SKILL_DIR.replace(/\\/g, "\\\\")}\`
+
+3. Get the current HEAD commit SHA: \`git rev-parse HEAD\`
+   Write that SHA (and nothing else) to: \`${VERSION_FILE.replace(/\\/g, "\\\\")}\`
+
+4. Reload extensions using the \`extensions_reload\` tool.
+
+5. Confirm to the user that lazypm has been updated, showing the new commit SHA and message.
+`;
+
 const USAGE_TEXT = [
     "lazypm: Lazy PR manager. Two modes of operation:",
     "",
@@ -235,6 +301,7 @@ const USAGE_TEXT = [
     "  lazypm <PR URL> yolo             Fix build + conflicts + review feedback",
     "                                   (never auto-merges; human review required)",
     "  lazypm <Name>                    PM mode: find and implement their requests",
+    "  lazypm update                    Update lazypm to the latest version",
     "",
     "Examples:",
     "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456",
@@ -255,6 +322,9 @@ function parseLazypmCommand(prompt) {
 
     // No arguments: show usage
     if (!rest) return { mode: "usage" };
+
+    // Check for update command
+    if (/^update$/i.test(rest)) return { mode: "update" };
 
     // Extract flags
     const flags = new Set();
@@ -346,10 +416,21 @@ const session = await joinSession({
                         additionalContext: PM_WORKFLOW,
                     };
                 }
+
+                case "update": {
+                    await session.log("lazypm: Updating to latest version...");
+                    return {
+                        modifiedPrompt: "Execute the lazypm update workflow. Pull the latest version and update installed files.",
+                        additionalContext: UPDATE_WORKFLOW,
+                    };
+                }
             }
         },
     },
     tools: [],
 });
 
-await session.log("lazypm loaded. Usage: lazypm <PR URL> [yolo] [#sign-off] | lazypm <Name>");
+await session.log("lazypm loaded. Usage: lazypm <PR URL> [yolo] [#sign-off] | lazypm <Name> | lazypm update");
+
+// Fire-and-forget update check (never blocks startup)
+checkForUpdates(session).catch(() => {});
