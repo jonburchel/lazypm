@@ -1,6 +1,6 @@
 # lazypm
 
-A Copilot CLI extension that automates the "fix a PR's build issues and/or merge conflicts, then re-submit" workflow.
+A Copilot CLI extension with two modes: fix and re-submit existing PRs, or fulfill PM content change requests from scratch.
 
 ## Usage
 
@@ -8,23 +8,36 @@ A Copilot CLI extension that automates the "fix a PR's build issues and/or merge
 lazypm <PR URL>                  # Fix build issues, create new PR, close original
 lazypm <PR URL> #sign-off        # Same + auto-merge after clean build
 lazypm <PR URL> yolo             # Fix build + resolve conflicts + address review feedback
+lazypm <Name>                    # PM mode: find and implement their requests
 ```
 
-If you omit the PR URL, it shows usage and examples.
+If you omit arguments, it shows usage and examples.
 
 ## Modes
 
-### Basic mode (default)
+### PR mode: Basic (default)
 Fixes build warnings, errors, and suggestions. If the PR has merge conflicts, it stops and tells you to use yolo mode instead.
 
-### Yolo mode
+### PR mode: Yolo
 Does everything basic mode does, plus:
 - **Resolves merge conflicts** by cherry-picking the author's changes onto current main
 - **Addresses PR review comments** (inline suggestions, requested changes, reviewer feedback)
 - **Never auto-merges.** You must review and sign off manually after inspecting the changes.
 
+### PM mode
+Given a person's name, uses WorkIQ (Microsoft 365 Copilot) to find their recent content change requests, then implements them as a new PR:
+- Queries direct messages first, then widens to channels if needed
+- Presents findings and asks for confirmation before making changes
+- Creates a branch from the latest default branch of the target repo
+- Makes the requested changes, commits with attribution, and creates a PR
+- Waits for a clean build, fixing any issues
+- Reports the PR URL so you can send it to the PM
+
+PM mode does not support `yolo` or `#sign-off` flags. Changes always require manual review.
+
 ## What it does
 
+### PR mode workflow
 1. Reads the original PR, its build report, and checks for merge conflicts
 2. Creates a new branch from main and cherry-picks the PR's commits
 3. *(yolo)* Resolves any merge conflicts by applying the author's intended changes to current main
@@ -34,6 +47,16 @@ Does everything basic mode does, plus:
 7. Waits for the build to pass clean
 8. Closes the original PR with a link to the new one
 9. *(basic only)* Optionally signs off to merge if `#sign-off` is passed
+
+### PM mode workflow
+1. Queries WorkIQ for the named person's recent messages to you
+2. Identifies actionable content change requests (remove sections, update wording, etc.)
+3. Presents findings and waits for your confirmation
+4. Creates a branch from the target repo's latest default branch
+5. Makes the requested changes with full attribution to the PM
+6. Pushes, creates a PR with a detailed description
+7. Waits for the build to pass clean (fixes issues if needed)
+8. Reports the PR URL for you to share with the PM
 
 ## Installation
 
@@ -59,4 +82,7 @@ lazypm https://github.com/yourorg/your-repo/pull/123 #sign-off
 
 # Fix everything: build, conflicts, review comments (requires manual review)
 lazypm https://github.com/yourorg/your-repo/pull/123 yolo
+
+# Find and implement a PM's recent content change requests
+lazypm Amir Jafari
 ```

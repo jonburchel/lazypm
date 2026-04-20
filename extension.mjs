@@ -1,14 +1,16 @@
 // Extension: lazypm
-// Lazy PR manager - pulls a PR, fixes build warnings/errors/suggestions,
-// and optionally resolves merge conflicts, PR review comments, and
-// reviewer feedback (yolo mode). Creates a new clean PR and closes the original.
+// Lazy PR manager with two modes:
+// 1. PR mode: pulls a PR, fixes build warnings/errors/suggestions,
+//    and optionally resolves merge conflicts, PR review comments, and
+//    reviewer feedback (yolo mode). Creates a new clean PR and closes the original.
+// 2. PM mode: given a person's name, queries WorkIQ for their recent content
+//    change requests, then creates a PR implementing those changes.
 
 import { approveAll } from "@github/copilot-sdk";
 import { joinSession } from "@github/copilot-sdk/extension";
 
-// Matches: lazypm <GitHub PR URL> [yolo] [#sign-off]
-// Also matches: lazypm (no URL, shows usage)
-const LAZYPM_PATTERN = /^\s*lazypm(?:\s+(https:\/\/github\.com\/[^\s]+\/pull\/\d+))?(?:\s+(yolo))?(?:\s+(#sign-off))?\s*$/i;
+const PR_URL_PATTERN = /https:\/\/github\.com\/[^\s]+\/pull\/\d+/i;
+const FLAGS = /\b(yolo|#sign-off)\b/gi;
 
 const BASIC_WORKFLOW = `
 You are executing the **lazypm** workflow in **basic mode**. Follow these steps precisely:
@@ -135,62 +137,219 @@ For each comment addressed, track what was done so it can be documented in the n
 - Switch back to the main branch locally.
 `;
 
+const PM_WORKFLOW = `
+You are executing the **lazypm** workflow in **PM mode**. A person's name has been provided.
+Your job is to find their recent content change requests and implement them as a PR.
+
+**This is a two-phase workflow. You MUST stop after Phase 1 and wait for user confirmation before proceeding to Phase 2. Do NOT skip the confirmation step.**
+
+---
+
+## Phase 1: Discover and Confirm
+
+### Step 1: Query WorkIQ for the PM's requests
+Use the \`workiq-ask_work_iq\` tool to search for recent messages from this person.
+
+**First query** (direct messages): Ask WorkIQ something like:
+"What did [Name] ask me or discuss with me today? Show me the full conversation and any specific requests they made about content changes, documentation updates, or edits."
+
+**Second query** (only if the first returned nothing actionable): Widen the search:
+"Did [Name] send any messages in channels or group chats today that mentioned documentation changes, content updates, or requests for edits? Include any messages where they asked someone to make changes to docs or articles."
+
+Focus on **actionable content change requests**: remove a section, change wording, remove preview terminology, update a prerequisite, fix a description, etc.
+
+### Step 2: Present findings and STOP
+Present what you found to the user:
+- Quote the specific requests with context
+- Identify which files/pages/repos are affected (from URLs, page titles, or file references in the conversation)
+- List each discrete change to be made
+
+**You MUST use the ask_user tool here to get explicit confirmation before proceeding.**
+Ask the user to confirm:
+1. Are these the right changes?
+2. Which repo should be targeted? (If you can confidently infer from URLs or file paths mentioned, suggest it, but still confirm.)
+
+**DO NOT proceed to Phase 2 until the user confirms. This is a hard gate.**
+
+---
+
+## Phase 2: Implement (only after user confirmation)
+
+### Step 3: Set up the branch
+- Check F:\\git and F:\\home for an existing clone of the target repo. Use an existing clone if found; only clone fresh if neither location has one.
+- Fetch the latest from upstream (the org repo, e.g. MicrosoftDocs). Identify the repo's **default branch** (do not assume "main"; check via \`git remote show upstream\` or \`git remote show origin\`, or GitHub API).
+- Create a new branch from the latest default branch. Name it descriptively based on the changes (e.g., "remove-xmla-prereq", "update-preview-terminology").
+
+### Step 4: Make the requested changes
+- Read the files that need to be modified.
+- Apply each change the PM requested. Be precise and surgical.
+- If removing a section that contains image references, also delete the orphaned image files.
+- If the changes affect shared includes (files in an \`includes/\` directory), understand the blast radius: those changes affect all pages that reference the include.
+- Update \`ms.date\` in YAML front matter of changed files to today's date (MM/DD/YYYY format).
+- If a page's \`description\` metadata references content that was removed, update it too.
+
+### Step 5: Commit and push
+- Stage only the files you changed (plus any deleted images).
+- Commit with a clear message describing what was changed and why.
+- Include the trailer: \`Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\`
+- Push the branch.
+
+### Step 6: Create the PR
+- Create a PR against the default branch of the upstream repo.
+- Title: a concise description of the changes.
+- Body should include:
+  - **Summary**: What changes were made and why
+  - **Attribution**: "Per [PM Name]'s request" with context on what they asked for
+  - **Changes**: A bulleted list of each specific change made
+  - **Impact**: Note any cross-cutting effects (shared includes, etc.)
+
+### Step 7: Wait for build and fix issues
+- Wait 3 minutes, then check the PR for build report comments.
+- If the build has warnings, errors, or suggestions, fix them and force-push. Repeat until the build is clean.
+- If a build issue cannot be fixed, tell the user.
+
+### Step 8: Report to the user
+- Share the PR URL.
+- Summarize what was done.
+- Suggest the user send the PR link to the PM for review/approval.
+- Note: PM mode never auto-merges. The user must review and sign off manually.
+
+### Step 9: Clean up
+- Remove any temporary git remotes added.
+- Switch back to the default branch locally.
+`;
+
+const USAGE_TEXT = [
+    "lazypm: Lazy PR manager. Two modes of operation:",
+    "",
+    "  PR mode:  Fix build issues on an existing PR, create a clean new PR,",
+    "            close the original. Yolo mode also resolves merge conflicts",
+    "            and addresses PR review/reviewer comments.",
+    "",
+    "  PM mode:  Given a PM's name, find their recent content change requests",
+    "            via WorkIQ and implement them as a new PR.",
+    "",
+    "Usage:",
+    "  lazypm <PR URL>                  Fix build issues, create new PR",
+    "  lazypm <PR URL> #sign-off        Same + auto-merge after clean build",
+    "  lazypm <PR URL> yolo             Fix build + conflicts + review feedback",
+    "                                   (never auto-merges; human review required)",
+    "  lazypm <Name>                    PM mode: find and implement their requests",
+    "",
+    "Examples:",
+    "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456",
+    "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 #sign-off",
+    "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 yolo",
+    "  lazypm Amir Jafari",
+].join("\n");
+
+/**
+ * Parse the lazypm command from user input.
+ * Returns null if input doesn't start with "lazypm", or a parsed command object.
+ */
+function parseLazypmCommand(prompt) {
+    const trimmed = prompt.trim();
+    if (!/^lazypm\b/i.test(trimmed)) return null;
+
+    const rest = trimmed.replace(/^lazypm\s*/i, "").trim();
+
+    // No arguments: show usage
+    if (!rest) return { mode: "usage" };
+
+    // Extract flags
+    const flags = new Set();
+    const withoutFlags = rest.replace(FLAGS, (flag) => {
+        flags.add(flag.toLowerCase());
+        return "";
+    }).trim();
+
+    // Check for PR URL
+    const urlMatch = withoutFlags.match(PR_URL_PATTERN);
+    if (urlMatch) {
+        const prUrl = urlMatch[0];
+        const parsed = prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+        if (!parsed) return { mode: "invalid_url", url: prUrl };
+
+        const yolo = flags.has("yolo");
+        const signOff = flags.has("#sign-off") && !yolo;
+        return {
+            mode: yolo ? "yolo" : "basic",
+            prUrl,
+            owner: parsed[1],
+            repo: parsed[2],
+            prNumber: parsed[3],
+            signOff,
+        };
+    }
+
+    // Remaining text is a PM name (reject flags that don't apply)
+    if (!withoutFlags) return { mode: "usage" };
+    if (flags.has("yolo") || flags.has("#sign-off")) {
+        return {
+            mode: "pm_invalid_flags",
+            name: withoutFlags,
+            flags: [...flags],
+        };
+    }
+
+    return { mode: "pm", name: withoutFlags };
+}
+
 const session = await joinSession({
     onPermissionRequest: approveAll,
     hooks: {
         onUserPromptSubmitted: async (input) => {
-            const match = input.prompt.match(LAZYPM_PATTERN);
-            if (!match) return;
+            const cmd = parseLazypmCommand(input.prompt);
+            if (!cmd) return;
 
-            const prUrl = match[1];
-            const yolo = !!match[2];
-            const signOff = !!match[3];
+            switch (cmd.mode) {
+                case "usage":
+                    return {
+                        modifiedPrompt: "Display the usage for the lazypm extension to the user.",
+                        additionalContext: USAGE_TEXT,
+                    };
 
-            if (!prUrl) {
-                return {
-                    modifiedPrompt: "Display the usage for the lazypm extension to the user.",
-                    additionalContext: [
-                        "lazypm: Lazy PR manager. Fixes build issues on a PR, creates a clean new PR,",
-                        "closes the original. In yolo mode, also resolves merge conflicts and addresses",
-                        "PR review/reviewer comments.",
-                        "",
-                        "Usage: lazypm <PR URL> [yolo] [#sign-off]",
-                        "",
-                        "Modes:",
-                        "  lazypm <URL>                  Basic: fix build issues only",
-                        "  lazypm <URL> #sign-off        Basic + auto-merge after clean build",
-                        "  lazypm <URL> yolo             Yolo: fix build + conflicts + review feedback",
-                        "                                (never auto-merges; human review required)",
-                        "",
-                        "Examples:",
-                        "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456",
-                        "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 #sign-off",
-                        "  lazypm https://github.com/MicrosoftDocs/azure-docs/pull/456 yolo",
-                    ].join("\n"),
-                };
+                case "invalid_url":
+                    return {
+                        modifiedPrompt: "The user provided an invalid PR URL for lazypm. Ask them to provide a valid GitHub PR URL.",
+                        additionalContext: `Invalid URL provided: ${cmd.url}. Expected format: https://github.com/owner/repo/pull/NUMBER`,
+                    };
+
+                case "pm_invalid_flags":
+                    return {
+                        modifiedPrompt: "Tell the user that PM mode does not support yolo or #sign-off flags.",
+                        additionalContext: [
+                            `The user tried: lazypm ${cmd.name} ${cmd.flags.join(" ")}`,
+                            "",
+                            "PM mode does not support yolo or #sign-off flags.",
+                            "yolo and #sign-off only apply to PR mode (with a GitHub PR URL).",
+                            "PM mode always requires manual review before merging.",
+                            "",
+                            "Correct usage: lazypm <Name>",
+                            `Example: lazypm ${cmd.name}`,
+                        ].join("\n"),
+                    };
+
+                case "basic":
+                case "yolo": {
+                    await session.log(`lazypm: Processing PR #${cmd.prNumber} from ${cmd.owner}/${cmd.repo}${cmd.mode === "yolo" ? " (YOLO mode)" : ""}${cmd.signOff ? " (with sign-off)" : ""}`);
+                    return {
+                        modifiedPrompt: `Execute the lazypm workflow for PR #${cmd.prNumber} in ${cmd.owner}/${cmd.repo}. PR URL: ${cmd.prUrl}. Mode: ${cmd.mode}. Sign-off: ${cmd.signOff ? "YES" : "NO"}.`,
+                        additionalContext: cmd.mode === "yolo" ? YOLO_WORKFLOW : BASIC_WORKFLOW,
+                    };
+                }
+
+                case "pm": {
+                    await session.log(`lazypm: PM mode — looking up requests from ${cmd.name}`);
+                    return {
+                        modifiedPrompt: `Execute the lazypm PM workflow. Find and implement recent content change requests from: ${cmd.name}`,
+                        additionalContext: PM_WORKFLOW,
+                    };
+                }
             }
-
-            // Parse owner, repo, PR number from URL
-            const urlMatch = prUrl.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
-            if (!urlMatch) {
-                return {
-                    modifiedPrompt: "The user provided an invalid PR URL for lazypm. Ask them to provide a valid GitHub PR URL.",
-                    additionalContext: `Invalid URL provided: ${prUrl}. Expected format: https://github.com/owner/repo/pull/NUMBER`,
-                };
-            }
-
-            const [, owner, repo, prNumber] = urlMatch;
-
-            await session.log(`lazypm: Processing PR #${prNumber} from ${owner}/${repo}${yolo ? " (YOLO mode)" : ""}${signOff && !yolo ? " (with sign-off)" : ""}`);
-
-            const mode = yolo ? "yolo" : "basic";
-            return {
-                modifiedPrompt: `Execute the lazypm workflow for PR #${prNumber} in ${owner}/${repo}. PR URL: ${prUrl}. Mode: ${mode}. Sign-off: ${signOff && !yolo ? "YES" : "NO"}.`,
-                additionalContext: yolo ? YOLO_WORKFLOW : BASIC_WORKFLOW,
-            };
         },
     },
     tools: [],
 });
 
-await session.log("lazypm extension loaded. Usage: lazypm <PR URL> [yolo] [#sign-off]");
+await session.log("lazypm loaded. Usage: lazypm <PR URL> [yolo] [#sign-off] | lazypm <Name>");
