@@ -430,7 +430,7 @@ const session = await joinSession({
     tools: [],
 });
 
-await session.log("lazypm loaded. Usage: lazypm <PR URL> [yolo] [#sign-off] | lazypm <Name> | lazypm update");
+await session.log("lazypm loaded. Usage: /lazypm <PR URL> [yolo] [#sign-off] | /lazypm <Name> | /lazypm update");
 
 // Fire-and-forget update check (never blocks startup)
 checkForUpdates(session).catch(() => {});
