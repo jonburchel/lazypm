@@ -15,6 +15,25 @@ import { readFile, writeFile } from "node:fs/promises";
 const PR_URL_PATTERN = /https:\/\/github\.com\/[^\s]+\/pull\/\d+/i;
 const FLAGS = /\b(yolo|#sign-off)\b/gi;
 
+/**
+ * Check if a GitHub repo is private. Returns true if private, false if public.
+ * Returns null if the check fails (treat as unsafe / block).
+ */
+async function isRepoPrivate(owner, repo) {
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    const headers = { "Accept": "application/vnd.github.v3+json", "User-Agent": "lazypm-extension" };
+    if (token) headers["Authorization"] = `token ${token}`;
+
+    try {
+        const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.private === true;
+    } catch {
+        return null;
+    }
+}
+
 // Auto-update paths (derived from this file's location)
 const __filename = fileURLToPath(import.meta.url);
 const EXTENSION_DIR = dirname(__filename);
@@ -56,8 +75,22 @@ async function checkForUpdates(session) {
     }
 }
 
+const SAFETY_PREAMBLE = `
+## CRITICAL SAFETY RULE — PRIVATE REPOS ONLY
+
+**NEVER push to, create PRs in, or modify public GitHub repositories.**
+
+Before pushing or creating a PR, verify the target repo is private:
+\`gh api repos/{owner}/{repo} --jq .private\`
+
+If the result is NOT "true", STOP immediately and tell the user.
+This is a hard safety gate. No exceptions.
+`;
+
 const BASIC_WORKFLOW = `
 You are executing the **lazypm** workflow in **basic mode**. Follow these steps precisely:
+
+${SAFETY_PREAMBLE}
 
 ## Step 1: Read the original PR
 - Use the GitHub MCP tools to get the PR details, changed files, diff, and build comments.
@@ -109,6 +142,8 @@ If there were no build issues, skip this step.
 
 const YOLO_WORKFLOW = `
 You are executing the **lazypm** workflow in **yolo mode**. This mode handles everything: build fixes, merge conflicts, AND PR review/reviewer feedback. Follow these steps precisely:
+
+${SAFETY_PREAMBLE}
 
 ## Step 1: Read the original PR
 - Use the GitHub MCP tools to get the PR details, changed files, diff, and build comments.
@@ -184,6 +219,8 @@ For each comment addressed, track what was done so it can be documented in the n
 const PM_WORKFLOW = `
 You are executing the **lazypm** workflow in **PM mode**. A person's name has been provided.
 Your job is to find their recent content change requests and implement them as a PR.
+
+${SAFETY_PREAMBLE}
 
 **This is a two-phase workflow. You MUST stop after Phase 1 and wait for user confirmation before proceeding to Phase 2. Do NOT skip the confirmation step.**
 
@@ -402,6 +439,19 @@ const session = await joinSession({
 
                 case "basic":
                 case "yolo": {
+                    const isPrivate = await isRepoPrivate(cmd.owner, cmd.repo);
+                    if (isPrivate === false) {
+                        return {
+                            modifiedPrompt: "Tell the user that lazypm BLOCKED this operation because the target repo is public.",
+                            additionalContext: `BLOCKED: ${cmd.owner}/${cmd.repo} is a PUBLIC repository. lazypm only operates on private repos. Never push to or create PRs in public repositories.`,
+                        };
+                    }
+                    if (isPrivate === null) {
+                        return {
+                            modifiedPrompt: "Tell the user that lazypm could not verify the repo's visibility and blocked the operation as a precaution.",
+                            additionalContext: `BLOCKED: Could not verify whether ${cmd.owner}/${cmd.repo} is private. lazypm requires confirmation that a repo is private before proceeding. Check your GitHub token and try again.`,
+                        };
+                    }
                     await session.log(`lazypm: Processing PR #${cmd.prNumber} from ${cmd.owner}/${cmd.repo}${cmd.mode === "yolo" ? " (YOLO mode)" : ""}${cmd.signOff ? " (with sign-off)" : ""}`);
                     return {
                         modifiedPrompt: `Execute the lazypm workflow for PR #${cmd.prNumber} in ${cmd.owner}/${cmd.repo}. PR URL: ${cmd.prUrl}. Mode: ${cmd.mode}. Sign-off: ${cmd.signOff ? "YES" : "NO"}.`,
